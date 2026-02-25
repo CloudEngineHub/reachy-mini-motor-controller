@@ -1,5 +1,9 @@
 # Changelog
 
+### v1.5.5
+
+* Fix a bug in async_read_raw_bytes that caused the whole loop to hang.
+
 ### v1.5.4
 
 * Avoid lock poisoning when run loop panic.
