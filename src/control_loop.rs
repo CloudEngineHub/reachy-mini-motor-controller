@@ -571,8 +571,11 @@ fn run(
     tokio::runtime::Runtime::new().unwrap().block_on(async {
         let mut interval = time::interval(read_position_loop_period);
 
-        // Stats related variables
+        // Stats related variables. Buffered locally and swapped into the shared
+        // stats at each publish so they describe only the last window (otherwise
+        // they would grow unbounded for the lifetime of the loop).
         let mut stats_t0 = std::time::Instant::now();
+        let mut period = Vec::new();
         let mut read_dt = Vec::new();
         let mut write_dt = Vec::new();
 
@@ -593,8 +596,8 @@ fn run(
                 }
                 _ = interval.tick() => {
                     let read_tick = std::time::Instant::now();
-                    if let Some((_, stats)) = &last_stats {
-                        stats.lock().unwrap().period.push(read_tick.duration_since(last_read_tick).as_secs_f64());
+                    if last_stats.is_some() {
+                        period.push(read_tick.duration_since(last_read_tick).as_secs_f64());
                         last_read_tick = read_tick;
                     }
 
@@ -624,13 +627,15 @@ fn run(
                         read_dt.push(elapsed);
                     }
 
-                    if let Some((period, stats)) = &last_stats
-                        && stats_t0.elapsed() > *period {
-                            stats.lock().unwrap().read_dt.extend(read_dt.iter().cloned());
-                            stats.lock().unwrap().write_dt.extend(write_dt.iter().cloned());
-
-                            read_dt.clear();
-                            write_dt.clear();
+                    if let Some((stats_pub_period, stats)) = &last_stats
+                        && stats_t0.elapsed() > *stats_pub_period {
+                            // Swap the buffered window into the shared stats,
+                            // leaving the local buffers empty for the next one.
+                            let mut s = stats.lock().unwrap();
+                            s.period = std::mem::take(&mut period);
+                            s.read_dt = std::mem::take(&mut read_dt);
+                            s.write_dt = std::mem::take(&mut write_dt);
+                            drop(s);
                             stats_t0 = std::time::Instant::now();
                     }
                 }
