@@ -1,5 +1,9 @@
 # Changelog
 
+### v1.5.6
+
+* Fix control stats memory infinite growth.
+
 ### v1.5.5
 
 * Fix a bug in async_read_raw_bytes that caused the whole loop to hang.
